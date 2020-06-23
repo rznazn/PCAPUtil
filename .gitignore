@@ -1,0 +1,4 @@
+#ignore folders with generated files, ** to ignore any bin or obj folder anywhere in the directory.
+**/bin 
+**/obj
+.vs
