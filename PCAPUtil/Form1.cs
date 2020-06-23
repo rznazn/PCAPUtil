@@ -17,6 +17,24 @@ namespace PCAPUtil
         public Form1()
         {
             InitializeComponent();
+            SetDataGridView();
+        }
+        private void dataGridView1_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+
+        }
+
+        private void btnRun_Click(object sender, EventArgs e)
+        {
+            foreach (Capture cap in captures)
+            {
+                cap.Run();
+            }
+
+        }
+
+        private void SetDataGridView()
+        {
             DataGridViewTextBoxColumn nameCol = new DataGridViewTextBoxColumn();
             nameCol.HeaderText = "name";
             nameCol.DataPropertyName = "name";
@@ -54,9 +72,5 @@ namespace PCAPUtil
             dgvCaptures.DataSource = captures;
         }
 
-        private void btnRun_Click(object sender, EventArgs e)
-        {
-
-        }
     }
 }
