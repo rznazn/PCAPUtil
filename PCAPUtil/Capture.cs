@@ -18,6 +18,8 @@ namespace PCAPUtil
         public int sourcePort { get; set; }
         public string filepath { get; set; }
 
+        public int packetCount { get; private set; }
+
         private static int instanceCount = 1;
         private Thread capThread;
 
@@ -29,18 +31,30 @@ namespace PCAPUtil
             sourceIP = "127.0.0.1";
             sourcePort = 8888;
             filepath = "c:\\file.pcap";
-            capThread = new Thread(RecordCapture);
         }
 
         public void Run()
         {
             if(running)
             {
-
+                running = false;
+                while (capThread.IsAlive) ;
+                capThread.Abort();
+                capThread = null;
             }
             else
             {
                 running = true;
+                if (capThread == null)
+                {
+                    capThread = new Thread(RecordCapture);
+                }
+                else
+                {
+                    capThread.Abort();
+                    capThread = null;
+                    capThread = new Thread(RecordCapture);
+                }
                 capThread.Start();
             }
 
@@ -48,13 +62,19 @@ namespace PCAPUtil
 
         private void RecordCapture()
         {
+            packetCount = 0;
             UdpClient client = new UdpClient(sourcePort, AddressFamily.InterNetwork);
             client.JoinMulticastGroup(IPAddress.Parse(sourceIP), IPAddress.Parse(interfaceIP));
             IPEndPoint endpoint = new IPEndPoint(IPAddress.Parse(sourceIP), sourcePort);
             while (running)
             {
-                byte[] payload = client.Receive(ref endpoint);
+                if (client.Available > 0)
+                {
+                    byte[] payload = client.Receive(ref endpoint);
+                    packetCount++;
+                }
             }
+            client.Close();
         }
     }
 }

@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace PCAPUtil
@@ -14,23 +17,42 @@ namespace PCAPUtil
     public partial class Form1 : Form
     {
         public BindingList<Capture> captures = new BindingList<Capture>();
+        private bool running;
+        public delegate void CountUpdateDelegate();
+        private CountUpdateDelegate updateDelegate;
+        Thread countUpdateThread;
+
+        JavaScriptSerializer mul = new JavaScriptSerializer();
         public Form1()
         {
             InitializeComponent();
             SetDataGridView();
-        }
-        private void dataGridView1_CellClick(object sender, DataGridViewCellEventArgs e)
-        {
-
+            updateDelegate = new CountUpdateDelegate(captures.ResetBindings);
         }
 
         private void btnRun_Click(object sender, EventArgs e)
         {
+            dgvCaptures.Enabled = running;
+            running = !running;
+            if (countUpdateThread == null)
+            {
+                countUpdateThread = new Thread(UpdateCounts);
+                countUpdateThread.Start();
+            }
             foreach (Capture cap in captures)
             {
                 cap.Run();
             }
 
+        }
+
+        private void UpdateCounts()
+        {
+            while (true)
+            {
+                this.Invoke(updateDelegate);
+                Thread.Sleep(1000);
+            }
         }
 
         private void SetDataGridView()
@@ -67,10 +89,39 @@ namespace PCAPUtil
             DataGridViewTextBoxColumn saveFileCol = new DataGridViewTextBoxColumn();
             saveFileCol.HeaderText = "save file";
             saveFileCol.DataPropertyName = "filepath";
+            saveFileCol.Width = 300;
             dgvCaptures.Columns.Add(saveFileCol);
 
             dgvCaptures.DataSource = captures;
         }
 
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            var dialog = new SaveFileDialog();
+            dialog.Filter = "Text Files | *.txt";
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                Stream filestream = dialog.OpenFile();
+                StreamWriter author = new StreamWriter(filestream);
+                author.Write(mul.Serialize(captures));
+                author.Flush();
+                author.Close();
+            }
+        }
+
+        private void btnLoad_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog();
+            dialog.Filter = "Text Files | *.txt";
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                List<Capture> loaded = mul.Deserialize<List<Capture>>(File.ReadAllText(dialog.FileName));
+                foreach(Capture cap in loaded)
+                {
+                    captures.Add(cap);
+                }
+                captures.ResetBindings();
+            }
+        }
     }
 }
