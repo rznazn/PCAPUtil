@@ -42,6 +42,7 @@ namespace PCAPUtil
             foreach (Capture cap in captures)
             {
                 cap.Run();
+                Thread.Sleep(250);//seems to help make sure all threads start. static resource in sharp pcap
             }
             if(!running)
             {

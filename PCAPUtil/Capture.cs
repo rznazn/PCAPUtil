@@ -30,9 +30,10 @@ namespace PCAPUtil
         private DateTime lastFileCreateTime = DateTime.MinValue;
         private string lastFileCreated = "";
         private Thread capThread;
+        private bool launched;
 
 
-        private  CaptureFileWriterDevice captureFileWriter = null;
+        private CaptureFileWriterDevice captureFileWriter = null;
         private LibPcapLiveDevice theDevice = null;
 
         public Capture()
@@ -50,7 +51,10 @@ namespace PCAPUtil
             if (running)
             {
                 running = false;
+                launched = false;
 
+                theDevice.StopCapture();
+                theDevice.Close();
                 capThread.Abort();
                 while (capThread.IsAlive) ;
                 capThread = null;
@@ -65,6 +69,7 @@ namespace PCAPUtil
                 else
                 {
                     capThread.Abort();
+                    while (capThread.IsAlive) ;
                     capThread = null;
                     capThread = new Thread(RecordCapture);
                 }
@@ -78,79 +83,86 @@ namespace PCAPUtil
             //UdpClient client = new UdpClient(sourcePort, AddressFamily.InterNetwork);
             //client.JoinMulticastGroup(IPAddress.Parse(sourceIP), IPAddress.Parse(interfaceIP));
 
-            //client.Close();
             // Retrieve the device list
 
             // open the output file
             LibPcapLiveDeviceList devices = LibPcapLiveDeviceList.Instance;
             bool breakerBar = false;
-            foreach (LibPcapLiveDevice dev in devices)
-            {
-                if (breakerBar) break;
-                foreach (PcapAddress address in dev.Addresses)
+            
+                foreach (LibPcapLiveDevice dev in devices)
                 {
-                    if (address.Addr.ToString() == interfaceIP)
+                    if (breakerBar) break;
+                    foreach (PcapAddress address in dev.Addresses)
                     {
-                        theDevice = dev;
-                    theDevice.OnPacketArrival +=
-                        new PacketArrivalEventHandler(device_OnPacketArrival);
-                        theDevice.Open(DeviceMode.Promiscuous, 50);
-                        theDevice.Filter = "udp and port " + sourcePort;
-                        theDevice.Capture();
-                        breakerBar = true;
-                        break;
+                        if (address.Addr.ToString() == interfaceIP)
+                        {
+                            theDevice = dev;
+                            theDevice.OnPacketArrival +=
+                                new PacketArrivalEventHandler(device_OnPacketArrival);
+                            theDevice.Open(DeviceMode.Promiscuous, 50);
+                            theDevice.Capture();
+                            launched = true;
+                            breakerBar = true;
+                            break;
+                        }
                     }
                 }
-            }
         }
-        private  void device_OnPacketArrival(object sender, CaptureEventArgs e)
+        private void device_OnPacketArrival(object sender, CaptureEventArgs e)
         {
             //var device = (ICaptureDevice)sender;
 
             // write the packet to the file
-                var packet = PacketDotNet.Packet.ParsePacket(e.Packet.LinkLayerType, e.Packet.Data);
-                var ethernetPacket = (EthernetPacket)packet;
+            var packet = PacketDotNet.Packet.ParsePacket(e.Packet.LinkLayerType, e.Packet.Data);
+            var ethernetPacket = (EthernetPacket)packet;
 
+            var ip = packet.Extract<PacketDotNet.IPPacket>();
+            var udp = packet.Extract<PacketDotNet.UdpPacket>();
 
-            if (e.Packet.LinkLayerType == PacketDotNet.LinkLayers.Ethernet)
+            if (udp != null)
             {
-                string datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour, DateTime.UtcNow.Minute) + ".pcap";
-                if (!File.Exists(datedFilePath))
-                {//if file doens't exist and this is the first run create new file
-                    if (lastFileCreateTime == DateTime.MinValue)
+                if (udp.DestinationPort == sourcePort)
+                {
+                    if (e.Packet.LinkLayerType == PacketDotNet.LinkLayers.Ethernet)
                     {
-                        lastFileCreateTime = DateTime.UtcNow;
-                        File.Create(datedFilePath).Close();
-                        lastFileCreated = datedFilePath;
-                        captureFileWriter = null;
-                    }//else file doesn't exist and this is not the first packet then wait one hour to start next file
-                    else if (lastFileCreateTime < DateTime.UtcNow.AddHours(-1))
-                    {
-                        lastFileCreateTime = DateTime.UtcNow;
-                        File.Create(datedFilePath).Close();
-                        lastFileCreated = datedFilePath;
-                        captureFileWriter = null;
+                        string datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00")) + "00.pcap";
+                        if (!File.Exists(datedFilePath))
+                        {//if file doens't exist and this is the first run create new file
+                            if (lastFileCreateTime == DateTime.MinValue)
+                            {
+                                lastFileCreateTime = DateTime.UtcNow;
+                                File.Create(datedFilePath).Close();
+                                lastFileCreated = datedFilePath;
+                                captureFileWriter = null;
+                            }//else file doesn't exist and this is not the first packet then wait one hour to start next file
+                            else if (lastFileCreateTime < DateTime.UtcNow.AddHours(-1))
+                            {
+                                lastFileCreateTime = DateTime.UtcNow;
+                                File.Create(datedFilePath).Close();
+                                lastFileCreated = datedFilePath;
+                                captureFileWriter = null;
+                            }
+                        }
+                        //if file does exist and this is first run
+                        else if (File.Exists(datedFilePath) && lastFileCreateTime == DateTime.MinValue)
+                        {
+                            lastFileCreateTime = DateTime.UtcNow;
+                            //add seconds to file name
+                            datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00"), DateTime.UtcNow.Second.ToString("00")) + ".pcap";
+                            File.Create(datedFilePath).Close();
+                            lastFileCreated = datedFilePath;
+                            captureFileWriter = null;
+                        }
+                        if (captureFileWriter == null)
+                        {
+                            captureFileWriter = new CaptureFileWriterDevice(theDevice, lastFileCreated);
+                        }
+                        captureFileWriter.Write(e.Packet);
+                        packetCount++;
+
                     }
                 }
-                //if file does exist and this is first run
-                else if(File.Exists(datedFilePath) && lastFileCreateTime == DateTime.MinValue)
-                {
-                    lastFileCreateTime = DateTime.UtcNow;
-                    //add seconds to file name
-                    datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour, DateTime.UtcNow.Minute, DateTime.UtcNow.Second) + ".pcap";
-                    File.Create(datedFilePath).Close();
-                    lastFileCreated = datedFilePath;
-                    captureFileWriter = null;
-                }
-                if (captureFileWriter == null)
-                {
-                    captureFileWriter = new CaptureFileWriterDevice(theDevice, lastFileCreated);
-                }
-                    captureFileWriter.Write(e.Packet);
-                    packetCount++;
-
             }
-
         }
         //public void WritePCap(
         //    string filename, TimeSpan dt, IPAddress srcIp, IPAddress dstIp,
