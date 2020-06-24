@@ -27,10 +27,12 @@ namespace PCAPUtil
 
         private static int instanceCount = 1;
         private static DateTime epoch = new DateTime(1970, 1, 1);
+        private DateTime lastFileCreateTime = DateTime.MinValue;
+        private string lastFileCreated = "";
         private Thread capThread;
 
 
-        private  CaptureFileWriterDevice captureFileWriter;
+        private  CaptureFileWriterDevice captureFileWriter = null;
         private LibPcapLiveDevice theDevice = null;
 
         public Capture()
@@ -48,53 +50,34 @@ namespace PCAPUtil
             if (running)
             {
                 running = false;
-                StopCapture();
 
-                //    while (capThread.IsAlive) ;
-                //    capThread.Abort();
-                //    capThread = null;
+                capThread.Abort();
+                while (capThread.IsAlive) ;
+                capThread = null;
             }
             else
             {
                 running = true;
-                RecordCapture();
+                if (capThread == null)
+                {
+                    capThread = new Thread(RecordCapture);
+                }
+                else
+                {
+                    capThread.Abort();
+                    capThread = null;
+                    capThread = new Thread(RecordCapture);
+                }
+                capThread.Start();
             }
-                //    if (capThread == null)
-                //    {
-                //        capThread = new Thread(RecordCapture);
-                //    }
-                //    else
-                //    {
-                //        capThread.Abort();
-                //        capThread = null;
-                //        capThread = new Thread(RecordCapture);
-                //    }
-                //    capThread.Start();
-            }
-
-        private void StopCapture()
-        {
-            theDevice.Close();
         }
 
         private void RecordCapture()
         {
-            //packetCount = 0;
-            UdpClient client = new UdpClient(sourcePort, AddressFamily.InterNetwork);
-            client.JoinMulticastGroup(IPAddress.Parse(sourceIP), IPAddress.Parse(interfaceIP));
-            //IPEndPoint endpoint = new IPEndPoint(IPAddress.Parse(sourceIP), sourcePort);
-            //; while (running)
-            //{
-            //    if (client.Available > 0)
-            //    {
-            //        byte[] payload = client.Receive(ref endpoint);
-            //        packetCount++;
-            //        TimeSpan unixTime = DateTime.UtcNow - epoch;
-            //        string datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour) + ".pcap";
-            //        WritePCap(datedFilePath, unixTime, IPAddress.Parse(interfaceIP), IPAddress.Parse(sourceIP), (UInt16)sourcePort, (UInt16)sourcePort, payload);
+            packetCount = 0;
+            //UdpClient client = new UdpClient(sourcePort, AddressFamily.InterNetwork);
+            //client.JoinMulticastGroup(IPAddress.Parse(sourceIP), IPAddress.Parse(interfaceIP));
 
-            //    }
-            //}
             //client.Close();
             // Retrieve the device list
 
@@ -118,9 +101,7 @@ namespace PCAPUtil
                         break;
                     }
                 }
-
             }
-            while (running) ;
         }
         private  void device_OnPacketArrival(object sender, CaptureEventArgs e)
         {
@@ -133,12 +114,40 @@ namespace PCAPUtil
 
             if (e.Packet.LinkLayerType == PacketDotNet.LinkLayers.Ethernet)
             {
-                string datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour) + ".pcap";
-                if (!File.Exists(datedFilePath)) File.Create(datedFilePath);
-                CaptureFileWriterDevice author = new CaptureFileWriterDevice(theDevice, datedFilePath);
-                captureFileWriter.Write(e.Packet);
-                author.Close();
-                packetCount++;
+                string datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour, DateTime.UtcNow.Minute) + ".pcap";
+                if (!File.Exists(datedFilePath))
+                {//if file doens't exist and this is the first run create new file
+                    if (lastFileCreateTime == DateTime.MinValue)
+                    {
+                        lastFileCreateTime = DateTime.UtcNow;
+                        File.Create(datedFilePath).Close();
+                        lastFileCreated = datedFilePath;
+                        captureFileWriter = null;
+                    }//else file doesn't exist and this is not the first packet then wait one hour to start next file
+                    else if (lastFileCreateTime < DateTime.UtcNow.AddHours(-1))
+                    {
+                        lastFileCreateTime = DateTime.UtcNow;
+                        File.Create(datedFilePath).Close();
+                        lastFileCreated = datedFilePath;
+                        captureFileWriter = null;
+                    }
+                }
+                //if file does exist and this is first run
+                else if(File.Exists(datedFilePath) && lastFileCreateTime == DateTime.MinValue)
+                {
+                    lastFileCreateTime = DateTime.UtcNow;
+                    //add seconds to file name
+                    datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour, DateTime.UtcNow.Minute, DateTime.UtcNow.Second) + ".pcap";
+                    File.Create(datedFilePath).Close();
+                    lastFileCreated = datedFilePath;
+                    captureFileWriter = null;
+                }
+                if (captureFileWriter == null)
+                {
+                    captureFileWriter = new CaptureFileWriterDevice(theDevice, lastFileCreated);
+                }
+                    captureFileWriter.Write(e.Packet);
+                    packetCount++;
 
             }
 
