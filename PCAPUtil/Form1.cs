@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SharpPcap.LibPcap;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -32,9 +33,8 @@ namespace PCAPUtil
 
         private void btnRun_Click(object sender, EventArgs e)
         {
-            dgvCaptures.Enabled = running;
             running = !running;
-            if (countUpdateThread == null)
+            if ( running)
             {
                 countUpdateThread = new Thread(UpdateCounts);
                 countUpdateThread.Start();
@@ -43,12 +43,19 @@ namespace PCAPUtil
             {
                 cap.Run();
             }
+            if(!running)
+            {
+                while (countUpdateThread.IsAlive) ;
+                countUpdateThread.Abort();
+                countUpdateThread = null;
+            }
+            dgvCaptures.Enabled = !running;
 
         }
 
         private void UpdateCounts()
         {
-            while (true)
+            while (running)
             {
                 this.Invoke(updateDelegate);
                 Thread.Sleep(1000);
