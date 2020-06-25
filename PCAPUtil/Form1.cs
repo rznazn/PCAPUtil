@@ -17,43 +17,52 @@ namespace PCAPUtil
 {
     public partial class Form1 : Form
     {
-        public BindingList<Capture> captures = new BindingList<Capture>();
-        private bool running;
+        //public BindingList<Capture> captures = new BindingList<Capture>();        //List of the capture connections to be made
+        private bool running;//bool for handling background threads
         public delegate void CountUpdateDelegate();
-        private CountUpdateDelegate updateDelegate;
-        Thread countUpdateThread;
+        private CountUpdateDelegate updateDelegate;//invokable to update packet counts
+        Thread countUpdateThread;//thread for updating packet counts
 
-        JavaScriptSerializer mul = new JavaScriptSerializer();
+        JavaScriptSerializer mul = new JavaScriptSerializer();//serializer for saving and loading config
         public Form1()
         {
             InitializeComponent();
             SetDataGridView();
-            updateDelegate = new CountUpdateDelegate(captures.ResetBindings);
+            updateDelegate = new CountUpdateDelegate(PCAPUtil.Capture.captures.ResetBindings);
         }
 
         private void btnRun_Click(object sender, EventArgs e)
         {
-            running = !running;
-            if ( running)
+            btnRun.Enabled = false;
+            running = !running;//toggle running
+            if ( running)//if running start update count thread and set led to green
             {
                 countUpdateThread = new Thread(UpdateCounts);
                 countUpdateThread.Start();
+                ledRunning.SetLEDGradient(Color.LightGreen, Color.Green);
             }
-            foreach (Capture cap in captures)
+            //foreach (Capture cap in PCAPUtil.Capture.captures)//call Run() for all captures. captures handle running or not internally
+            //{
+                //cap.Run();
+            PCAPUtil.Capture.Run();
+                //Thread.Sleep(500);//seems to help make sure all threads start. static resource in sharp pcap
+            //}
+            if(!running)//if not running set led to gray and kill update thread
             {
-                cap.Run();
-                Thread.Sleep(250);//seems to help make sure all threads start. static resource in sharp pcap
-            }
-            if(!running)
-            {
-                while (countUpdateThread.IsAlive) ;
+                ledRunning.SetLEDGradient(Color.LightGray, Color.DarkGray);
                 countUpdateThread.Abort();
+                while (countUpdateThread.IsAlive) ;
                 countUpdateThread = null;
             }
+            //diable or enable parts of GUI appropriately
             dgvCaptures.Enabled = !running;
-
+            btnLoad.Enabled = !running;
+            btnRun.Enabled = true;
         }
 
+        /// <summary>
+        /// method called on count updater thread
+        /// </summary>
         private void UpdateCounts()
         {
             while (running)
@@ -63,6 +72,9 @@ namespace PCAPUtil
             }
         }
 
+        /// <summary>
+        /// build the data grid view appropiately
+        /// </summary>
         private void SetDataGridView()
         {
             DataGridViewTextBoxColumn nameCol = new DataGridViewTextBoxColumn();
@@ -99,10 +111,24 @@ namespace PCAPUtil
             saveFileCol.DataPropertyName = "filepath";
             saveFileCol.Width = 300;
             dgvCaptures.Columns.Add(saveFileCol);
+            DataGridViewTextBoxColumn fileLengthCol = new DataGridViewTextBoxColumn();
+            fileLengthCol.HeaderText = "minutes per file";
+            fileLengthCol.DataPropertyName = "minutes";
+            dgvCaptures.Columns.Add(fileLengthCol);
+            DataGridViewTextBoxColumn packetCountCol = new DataGridViewTextBoxColumn();
+            packetCountCol.HeaderText = "packet count";
+            packetCountCol.DataPropertyName = "packetCount";
+            packetCountCol.ReadOnly = true;
+            dgvCaptures.Columns.Add(packetCountCol);
 
-            dgvCaptures.DataSource = captures;
+            dgvCaptures.DataSource = PCAPUtil.Capture.captures;
         }
 
+        /// <summary>
+        /// write the configuration to a file
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void btnSave_Click(object sender, EventArgs e)
         {
             var dialog = new SaveFileDialog();
@@ -111,24 +137,31 @@ namespace PCAPUtil
             {
                 Stream filestream = dialog.OpenFile();
                 StreamWriter author = new StreamWriter(filestream);
-                author.Write(mul.Serialize(captures));
+                author.Write(mul.Serialize(PCAPUtil.Capture.captures));
                 author.Flush();
                 author.Close();
             }
         }
 
+        /// <summary>
+        /// Load configuration from file
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void btnLoad_Click(object sender, EventArgs e)
         {
             OpenFileDialog dialog = new OpenFileDialog();
             dialog.Filter = "Text Files | *.txt";
             if (dialog.ShowDialog() == DialogResult.OK)
             {
+                PCAPUtil.Capture.captures.Clear();
                 List<Capture> loaded = mul.Deserialize<List<Capture>>(File.ReadAllText(dialog.FileName));
                 foreach(Capture cap in loaded)
                 {
-                    captures.Add(cap);
+                    cap.packetCount = 0;
+                    PCAPUtil.Capture.captures.Add(cap);
                 }
-                captures.ResetBindings();
+                PCAPUtil.Capture.captures.ResetBindings();
             }
         }
     }
