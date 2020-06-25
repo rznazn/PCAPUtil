@@ -64,6 +64,12 @@ namespace PCAPUtil
                     while (t.IsAlive) ;
                 }
 
+                foreach (Capture cap in captures)
+                {
+                    cap.lastFileCreated = null;
+                    cap.lastFileCreateTime = DateTime.MinValue;
+                }
+
                 foreach (KeyValuePair<string, LibPcapLiveDevice> pair in capDevices)//close all capture devices
                 {
                     if (pair.Value != null)
@@ -98,18 +104,7 @@ namespace PCAPUtil
                 foreach (string iip in usedInterfaces)
                 {
                     Thread thread = new Thread(() => RecordCapture(iip));
-                    //if (capThread == null)
-                    //{
-                    //    capThread = new Thread(RecordCapture);
-                    //}
-                    //else
-                    //{
-                    //    capThread.Abort();
-                    //    while (capThread.IsAlive) ;
-                    //    capThread = null;
-                    //    capThread = new Thread(RecordCapture);
-                    //}
-                    //capThread.Start();
+                    threads.Add(thread);
                     thread.Start();
                 }
             }
@@ -205,16 +200,6 @@ namespace PCAPUtil
                                     }
                                 }
                             }
-                            //if file does exist and this is first run
-                            //else if (File.Exists(datedFilePath) && lastFileCreateTime == DateTime.MinValue)
-                            //{
-                            //    lastFileCreateTime = DateTime.UtcNow;
-                            //    //add seconds to file name
-                            //    datedFilePath = filepath.Substring(0, filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00"), DateTime.UtcNow.Second.ToString("00")) + ".pcap";
-                            //    File.Create(datedFilePath).Close();
-                            //    lastFileCreated = datedFilePath;
-                            //    captureFileWriter = null;
-                            //}
                             if (authors.ContainsKey(cap.name))
                             {
                                 if (authors[cap.name] == null)
