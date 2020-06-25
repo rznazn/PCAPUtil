@@ -17,7 +17,6 @@ namespace PCAPUtil
 {
     public partial class Form1 : Form
     {
-        //public BindingList<Capture> captures = new BindingList<Capture>();        //List of the capture connections to be made
         private bool running;//bool for handling background threads
         public delegate void CountUpdateDelegate();
         private CountUpdateDelegate updateDelegate;//invokable to update packet counts
@@ -31,9 +30,15 @@ namespace PCAPUtil
             updateDelegate = new CountUpdateDelegate(PCAPUtil.Capture.captures.ResetBindings);
         }
 
+        /// <summary>
+        /// hanlde run click. start packet count update thread and trigger Capture.Run()
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void btnRun_Click(object sender, EventArgs e)
         {
-            btnRun.Enabled = false;
+            btnRun.Enabled = false;//disable button while starting to prevent wierd state from double clicking
+            PCAPUtil.Capture.Run();//start Captures
             running = !running;//toggle running
             if ( running)//if running start update count thread and set led to green
             {
@@ -41,13 +46,7 @@ namespace PCAPUtil
                 countUpdateThread.Start();
                 ledRunning.SetLEDGradient(Color.LightGreen, Color.Green);
             }
-            //foreach (Capture cap in PCAPUtil.Capture.captures)//call Run() for all captures. captures handle running or not internally
-            //{
-                //cap.Run();
-            PCAPUtil.Capture.Run();
-                //Thread.Sleep(500);//seems to help make sure all threads start. static resource in sharp pcap
-            //}
-            if(!running)//if not running set led to gray and kill update thread
+            else if(!running)//if not running set led to gray and kill update thread
             {
                 ledRunning.SetLEDGradient(Color.LightGray, Color.DarkGray);
                 countUpdateThread.Abort();
@@ -105,6 +104,7 @@ namespace PCAPUtil
             DataGridViewTextBoxColumn sourcePortCol = new DataGridViewTextBoxColumn();
             sourcePortCol.HeaderText = "source port";
             sourcePortCol.DataPropertyName = "sourcePort";
+            sourcePortCol.Width = 50;
             dgvCaptures.Columns.Add(sourcePortCol);
             DataGridViewTextBoxColumn saveFileCol = new DataGridViewTextBoxColumn();
             saveFileCol.HeaderText = "save file";
@@ -114,6 +114,7 @@ namespace PCAPUtil
             DataGridViewTextBoxColumn fileLengthCol = new DataGridViewTextBoxColumn();
             fileLengthCol.HeaderText = "minutes per file";
             fileLengthCol.DataPropertyName = "minutes";
+            fileLengthCol.Width = 50;
             dgvCaptures.Columns.Add(fileLengthCol);
             DataGridViewTextBoxColumn packetCountCol = new DataGridViewTextBoxColumn();
             packetCountCol.HeaderText = "packet count";

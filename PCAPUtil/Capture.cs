@@ -17,16 +17,16 @@ namespace PCAPUtil
 {
     public class Capture
     {
-        private static int instanceCount = 1;
-        private static DateTime epoch = new DateTime(1970, 1, 1);
-        public static BindingList<Capture> captures = new BindingList<Capture>();
-        private static List<string> usedInterfaces = new List<string>();
-        private static Dictionary<string, LibPcapLiveDevice> capDevices = new Dictionary<string, LibPcapLiveDevice>();
-        private static Dictionary<string, CaptureFileWriterDevice> authors = new Dictionary<string, CaptureFileWriterDevice>();
-        private static List<Thread> threads = new List<Thread>();
-        private static Thread capThread;
+        //static fields for management
+        private static int instanceCount = 1;//used to increment names
+        public static BindingList<Capture> captures = new BindingList<Capture>();//master list of all captures created
+        private static List<string> usedInterfaces = new List<string>();//used to only create one thread per used interface
+        private static Dictionary<string, LibPcapLiveDevice> capDevices = new Dictionary<string, LibPcapLiveDevice>();//map interface IP to capture device 
+        private static Dictionary<string, CaptureFileWriterDevice> authors = new Dictionary<string, CaptureFileWriterDevice>();//map Capture.name to file writer
+        private static List<Thread> threads = new List<Thread>(); //list of thread to aid thread clean up
+        private static bool running;//used to toggle capturing on and off
 
-        private static bool running;
+        //instance unique properties
         public string name { get; set; }
         public string interfaceIP { get; set; }
         public string sourceIP { get; set; }
@@ -34,13 +34,13 @@ namespace PCAPUtil
         public string filepath { get; set; }
         public int minutes { get; set; }
         public int packetCount { get; set; }
-
+        //instance unique properties not user defined
         private DateTime lastFileCreateTime = DateTime.MinValue;
         private string lastFileCreated = "";
 
-        private CaptureFileWriterDevice captureFileWriter = null;
-        private LibPcapLiveDevice theDevice = null;
-
+        /// <summary>
+        /// default constructor
+        /// </summary>
         public Capture()
         {
             running = false;
@@ -52,6 +52,9 @@ namespace PCAPUtil
             minutes = 60;
         }
 
+        /// <summary>
+        /// static function to start or stop capturing
+        /// </summary>
         public static void Run()
         {
             if (running)
@@ -64,13 +67,13 @@ namespace PCAPUtil
                     while (t.IsAlive) ;
                 }
 
-                foreach (Capture cap in captures)
+                foreach (Capture cap in captures)//reset filepath for next capture start
                 {
                     cap.lastFileCreated = null;
                     cap.lastFileCreateTime = DateTime.MinValue;
                 }
 
-                foreach (KeyValuePair<string, LibPcapLiveDevice> pair in capDevices)//close all capture devices
+                foreach (KeyValuePair<string, LibPcapLiveDevice> pair in capDevices)//close and clear all capture devices
                 {
                     if (pair.Value != null)
                     {
@@ -94,14 +97,13 @@ namespace PCAPUtil
             else
             {
                 running = true;
-
-                usedInterfaces.Clear();
+                usedInterfaces.Clear();//clear then reset capture interfaces
                 foreach (Capture cap in captures)
                 {
                     if (!usedInterfaces.Contains(cap.interfaceIP)) usedInterfaces.Add(cap.interfaceIP);
                     cap.packetCount = 0;
                 }
-                foreach (string iip in usedInterfaces)
+                foreach (string iip in usedInterfaces)//start a capture thread for all used interfaces
                 {
                     Thread thread = new Thread(() => RecordCapture(iip));
                     threads.Add(thread);
@@ -110,28 +112,32 @@ namespace PCAPUtil
             }
         }
 
+        /// <summary>
+        /// start capturing on a specific interface
+        /// </summary>
+        /// <param name="intIP"> the IP of the device intended for capture</param>
         private static void RecordCapture(string intIP)
         {
-            //UdpClient client = new UdpClient(sourcePort, AddressFamily.InterNetwork);
-            //client.JoinMulticastGroup(IPAddress.Parse(sourceIP), IPAddress.Parse(interfaceIP));
-
-            // Retrieve the device list
-
-            // open the output file
-            while (running)
+            while (running)//outer loop to attept to reconnect if device becomes unavailable ie USB NIC
             {
                 LibPcapLiveDevice device;
                 LibPcapLiveDeviceList devices = LibPcapLiveDeviceList.Instance;
                 bool breakerBar = false;
+                if (capDevices.ContainsKey(intIP))
+                {
+                    try  {capDevices[intIP].StopCapture(); } catch { }
+                    try { capDevices[intIP].Close(); } catch { }
+                    capDevices.Remove(intIP);
+                }
 
-                foreach (LibPcapLiveDevice dev in devices)
+                foreach (LibPcapLiveDevice dev in devices)//check all devices
                 {
                     if (breakerBar) break;
-                    foreach (PcapAddress address in dev.Addresses)
+                    foreach (PcapAddress address in dev.Addresses)//check all IPs on that device
                     {
-                        if (address.Addr.ToString() == intIP)
+                        if (address.Addr.ToString() == intIP)//if it matches the intended interface IP
                         {
-                            try
+                            try//set up capturing in try/catch so that an error kicks back to the while loop instead ocf killing thread
                             {
                                 device = dev;
                                 device.OnPacketArrival +=
@@ -146,70 +152,72 @@ namespace PCAPUtil
                         }
                     }
                 }
-                Thread.Sleep(250);
+                Thread.Sleep(250);//no need to recheck for NIC reconnect every millisecond
             }
         }
+
+        /// <summary>
+        /// Handles incoming packets
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e">e.packet is the collected packet</param>
         private static void device_OnPacketArrival(object sender, CaptureEventArgs e)
         {
-            //var device = (ICaptureDevice)sender;
-
-            // write the packet to the file
             var packet = PacketDotNet.Packet.ParsePacket(e.Packet.LinkLayerType, e.Packet.Data);
             var ethernetPacket = (EthernetPacket)packet;
 
             var ip = packet.Extract<PacketDotNet.IPPacket>();
             var udp = packet.Extract<PacketDotNet.UdpPacket>();
 
-            if (udp != null)
+            if (udp != null)//at this time we are only looking for multicast/udp
             {
                 foreach (Capture cap in captures)
                 {
+                    //check all Captrures if they match this packet
                     if (udp.DestinationPort == cap.sourcePort && ip.DestinationAddress.ToString() == cap.sourceIP)
                     {
+                        //honestly this was from the example. not sure if it's needed here but it isn't hurting anything
                         if (e.Packet.LinkLayerType == PacketDotNet.LinkLayers.Ethernet)
                         {
                             string datedFilePath = cap.filepath.Substring(0, cap.filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00"), DateTime.UtcNow.Second.ToString("00")) + ".pcap";
-                            if (!File.Exists(datedFilePath))
-                            {//if file doens't exist and this is the first run create new file
-                                if (cap.lastFileCreateTime == DateTime.MinValue)
-                                {
-                                    cap.lastFileCreateTime = DateTime.UtcNow;
-                                    File.Create(datedFilePath).Close();
-                                    cap.lastFileCreated = datedFilePath;
-                                    if (authors.ContainsKey(cap.name))
-                                    {
-                                        if (authors[cap.name] != null)
-                                        {
-                                            authors[cap.name].Close();
-                                            authors[cap.name] = null;
-                                        }
-                                    }
-                                }//else file doesn't exist and this is not the first packet then wait one hour to start next file
-                                else if (cap.lastFileCreateTime.AddMinutes(cap.minutes) < DateTime.UtcNow)
-                                {
-                                    cap.lastFileCreateTime = DateTime.UtcNow;
-                                    File.Create(datedFilePath).Close();
-                                    cap.lastFileCreated = datedFilePath;
-                                    if (authors.ContainsKey(cap.name))
-                                    {
-                                        if (authors[cap.name] != null)
-                                        {
-                                            authors[cap.name].Close();
-                                            authors[cap.name] = null;
-                                        }
-                                    }
-                                }
-                            }
-                            if (authors.ContainsKey(cap.name))
+
+                            if (cap.lastFileCreateTime == DateTime.MinValue)//create first file for this run
                             {
-                                if (authors[cap.name] == null)
+                                cap.lastFileCreateTime = DateTime.UtcNow;
+                                File.Create(datedFilePath).Close();
+                                cap.lastFileCreated = datedFilePath;
+                                if (authors.ContainsKey(cap.name))//if an author was already created clean it up. a new one will be created below
                                 {
+                                    if (authors[cap.name] != null)
+                                    {
+                                        authors[cap.name].Close();
+                                        authors[cap.name] = null;
+                                    }
                                     authors[cap.name] = new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated);
                                 }
+                                else
+                                {
+                                    authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
+                                }
                             }
-                            else
+                            else if (cap.lastFileCreateTime.AddMinutes(cap.minutes) < DateTime.UtcNow)//increment files at appropriate interval
                             {
-                                authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
+                                cap.lastFileCreateTime = DateTime.UtcNow;
+                                File.Create(datedFilePath).Close();
+                                cap.lastFileCreated = datedFilePath;
+                                if (authors.ContainsKey(cap.name))//if an author was already created clean it up. a new one will be created below
+                                {
+                                    if (authors[cap.name] != null)
+                                    {
+                                        authors[cap.name].Close();
+                                        authors[cap.name] = null;
+                                    }
+                                    authors[cap.name] = new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated);
+                                }
+                                else
+                                {
+                                    authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
+                                }
                             }
                             authors[cap.name].Write(e.Packet);
                             cap.packetCount++;
