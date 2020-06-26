@@ -31,12 +31,13 @@ namespace PCAPUtil
         public string interfaceIP { get; set; }
         public string sourceIP { get; set; }
         public int sourcePort { get; set; }
-        public string filepath { get; set; }
+        public string folderpath { get; set; }
         public int minutes { get; set; }
         public int packetCount { get; set; }
         //instance unique properties not user defined
         private DateTime lastFileCreateTime = DateTime.MinValue;
         private string lastFileCreated = "";
+        private UdpClient client;
 
         /// <summary>
         /// default constructor
@@ -48,7 +49,7 @@ namespace PCAPUtil
             interfaceIP = "127.0.0.1";
             sourceIP = "239.1.1.1";
             sourcePort = 3001;
-            filepath = "C:\\" + name + ".pcap";
+            folderpath = "C:\\";
             minutes = 60;
         }
 
@@ -66,11 +67,18 @@ namespace PCAPUtil
                     t.Abort();
                     while (t.IsAlive) ;
                 }
+                threads.Clear();//clear all threads
 
                 foreach (Capture cap in captures)//reset filepath for next capture start
                 {
                     cap.lastFileCreated = null;
                     cap.lastFileCreateTime = DateTime.MinValue;
+                    if (cap.client != null)//clean up Multicast subscribers
+                    {
+                        cap.client.DropMulticastGroup(IPAddress.Parse(cap.sourceIP));
+                        cap.client.Close();
+                        cap.client = null;
+                    }
                 }
 
                 foreach (KeyValuePair<string, LibPcapLiveDevice> pair in capDevices)//close and clear all capture devices
@@ -92,7 +100,6 @@ namespace PCAPUtil
                     }
                 authors.Clear();
 
-                threads.Clear();//clear all threads
             }
             else
             {
@@ -125,10 +132,11 @@ namespace PCAPUtil
                 bool breakerBar = false;
                 if (capDevices.ContainsKey(intIP))
                 {
-                    try  {capDevices[intIP].StopCapture(); } catch { }
+                    try { capDevices[intIP].StopCapture(); } catch { }
                     try { capDevices[intIP].Close(); } catch { }
                     capDevices.Remove(intIP);
                 }
+
 
                 foreach (LibPcapLiveDevice dev in devices)//check all devices
                 {
@@ -139,6 +147,26 @@ namespace PCAPUtil
                         {
                             try//set up capturing in try/catch so that an error kicks back to the while loop instead ocf killing thread
                             {
+                                foreach (Capture cap in captures)
+                                {
+                                    if (intIP == cap.interfaceIP)
+                                    {
+                                        if (cap.client != null)
+                                        {
+                                            try { cap.client.DropMulticastGroup(IPAddress.Parse(cap.sourceIP)); }
+                                            catch { }
+                                            cap.client.Close();
+                                            cap.client = null;
+                                        }
+                                        int octet = int.Parse(cap.sourceIP.Substring(0, cap.sourceIP.IndexOf('.')));
+                                        //start multicast subscribers
+                                        if (224 <= octet && octet <= 239)
+                                        {
+                                            cap.client = new UdpClient(cap.sourcePort, AddressFamily.InterNetwork);
+                                            cap.client.JoinMulticastGroup(IPAddress.Parse(cap.sourceIP), IPAddress.Parse(cap.interfaceIP));
+                                        }
+                                    }
+                                }
                                 device = dev;
                                 device.OnPacketArrival +=
                                     new PacketArrivalEventHandler(device_OnPacketArrival);
@@ -163,9 +191,12 @@ namespace PCAPUtil
         /// <param name="e">e.packet is the collected packet</param>
         private static void device_OnPacketArrival(object sender, CaptureEventArgs e)
         {
+            //cast sender to device to check interface IP
+            LibPcapLiveDevice interfaceDev = (LibPcapLiveDevice)sender;
+
+            //packets are like onions, they layers. The information we need to check exists at different layers.
             var packet = PacketDotNet.Packet.ParsePacket(e.Packet.LinkLayerType, e.Packet.Data);
             var ethernetPacket = (EthernetPacket)packet;
-
             var ip = packet.Extract<PacketDotNet.IPPacket>();
             var udp = packet.Extract<PacketDotNet.UdpPacket>();
 
@@ -173,20 +204,29 @@ namespace PCAPUtil
             {
                 foreach (Capture cap in captures)
                 {
-                    //check all Captrures if they match this packet
-                    if (udp.DestinationPort == cap.sourcePort && ip.DestinationAddress.ToString() == cap.sourceIP)
+                    bool interfaceMatch = false;
+                    foreach (PcapAddress address in interfaceDev.Addresses)//check all IPs on that device
                     {
-                        //honestly this was from the example. not sure if it's needed here but it isn't hurting anything
+                        if (address.Addr.ToString() == cap.interfaceIP)//if it matches the intended interface IP
+                        {
+                            interfaceMatch = true;
+                        }
+                    }
+                    //check all Captures if they match this packet's parameters
+                    if (udp.DestinationPort == cap.sourcePort && ip.DestinationAddress.ToString() == cap.sourceIP
+                && interfaceMatch)
+                    {
+                        //honestly this was from the example. I'm not sure if it's needed here but it isn't hurting anything
                         if (e.Packet.LinkLayerType == PacketDotNet.LinkLayers.Ethernet)
                         {
-                            string datedFilePath = cap.filepath.Substring(0, cap.filepath.Length - 5) + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00"), DateTime.UtcNow.Second.ToString("00")) + ".pcap";
+                            if (cap.lastFileCreateTime == DateTime.MinValue || cap.lastFileCreateTime.AddMinutes(cap.minutes) < DateTime.UtcNow)//set a new filepath and writer on first run or if it is time when capturing is stopped lastFileCreatedTime is reset and a new file will be started on next run
+                            {
+                                string datedFilePath = cap.folderpath+ "\\" + cap.name + string.Format("_{0}{1}{2}{3}{4}{5}", DateTime.UtcNow.Year, DateTime.UtcNow.Month.ToString("00"), DateTime.UtcNow.Day.ToString("00"), DateTime.UtcNow.Hour.ToString("00"), DateTime.UtcNow.Minute.ToString("00"), DateTime.UtcNow.Second.ToString("00")) + ".pcap";
 
-                            if (cap.lastFileCreateTime == DateTime.MinValue)//create first file for this run
-                            {
                                 cap.lastFileCreateTime = DateTime.UtcNow;
                                 File.Create(datedFilePath).Close();
                                 cap.lastFileCreated = datedFilePath;
-                                if (authors.ContainsKey(cap.name))//if an author was already created clean it up. a new one will be created below
+                                if (authors.ContainsKey(cap.name))//if an author was already created clean it upcreate a new one
                                 {
                                     if (authors[cap.name] != null)
                                     {
@@ -195,32 +235,34 @@ namespace PCAPUtil
                                     }
                                     authors[cap.name] = new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated);
                                 }
-                                else
-                                {
-                                    authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
-                                }
-                            }
-                            else if (cap.lastFileCreateTime.AddMinutes(cap.minutes) < DateTime.UtcNow)//increment files at appropriate interval
-                            {
-                                cap.lastFileCreateTime = DateTime.UtcNow;
-                                File.Create(datedFilePath).Close();
-                                cap.lastFileCreated = datedFilePath;
-                                if (authors.ContainsKey(cap.name))//if an author was already created clean it up. a new one will be created below
-                                {
-                                    if (authors[cap.name] != null)
-                                    {
-                                        authors[cap.name].Close();
-                                        authors[cap.name] = null;
-                                    }
-                                    authors[cap.name] = new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated);
-                                }
-                                else
+                                else//else add a new one
                                 {
                                     authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
                                 }
                             }
                             authors[cap.name].Write(e.Packet);
                             cap.packetCount++;
+                            #region Not Ready to Delete just yet
+                            //else if (cap.lastFileCreateTime.AddMinutes(cap.minutes) < DateTime.UtcNow)//increment files at appropriate interval
+                            //{
+                            //    cap.lastFileCreateTime = DateTime.UtcNow;
+                            //    File.Create(datedFilePath).Close();
+                            //    cap.lastFileCreated = datedFilePath;
+                            //    if (authors.ContainsKey(cap.name))//if an author was already created clean it up. a new one will be created below
+                            //    {
+                            //        if (authors[cap.name] != null)
+                            //        {
+                            //            authors[cap.name].Close();
+                            //            authors[cap.name] = null;
+                            //        }
+                            //        authors[cap.name] = new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated);
+                            //    }
+                            //    else
+                            //    {
+                            //        authors.Add(cap.name, new CaptureFileWriterDevice(capDevices[cap.interfaceIP], cap.lastFileCreated));
+                            //    }
+                            //}
+                            #endregion
                         }
                     }
                 }

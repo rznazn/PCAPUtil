@@ -33,7 +33,9 @@
             this.btnRun = new System.Windows.Forms.Button();
             this.btnLoad = new System.Windows.Forms.Button();
             this.btnSave = new System.Windows.Forms.Button();
+            this.ledBlinky = new EARS.LED();
             this.ledRunning = new EARS.LED();
+            this.label1 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.dgvCaptures)).BeginInit();
             this.SuspendLayout();
             // 
@@ -45,13 +47,13 @@
             this.dgvCaptures.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dgvCaptures.Location = new System.Drawing.Point(12, 51);
             this.dgvCaptures.Name = "dgvCaptures";
-            this.dgvCaptures.Size = new System.Drawing.Size(950, 399);
+            this.dgvCaptures.Size = new System.Drawing.Size(859, 172);
             this.dgvCaptures.TabIndex = 0;
+            this.dgvCaptures.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvCaptures_CellClick);
             // 
             // btnRun
             // 
-            this.btnRun.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnRun.Location = new System.Drawing.Point(205, 12);
+            this.btnRun.Location = new System.Drawing.Point(205, 13);
             this.btnRun.Name = "btnRun";
             this.btnRun.Size = new System.Drawing.Size(75, 23);
             this.btnRun.TabIndex = 1;
@@ -79,20 +81,40 @@
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
+            // ledBlinky
+            // 
+            this.ledBlinky.BackColor = System.Drawing.Color.Transparent;
+            this.ledBlinky.Location = new System.Drawing.Point(839, 14);
+            this.ledBlinky.Name = "ledBlinky";
+            this.ledBlinky.Size = new System.Drawing.Size(22, 22);
+            this.ledBlinky.TabIndex = 5;
+            // 
             // ledRunning
             // 
-            this.ledRunning.BackColor = System.Drawing.Color.LightSteelBlue;
-            this.ledRunning.Location = new System.Drawing.Point(286, 13);
+            this.ledRunning.BackColor = System.Drawing.Color.Transparent;
+            this.ledRunning.Location = new System.Drawing.Point(286, 14);
             this.ledRunning.Name = "ledRunning";
             this.ledRunning.Size = new System.Drawing.Size(22, 22);
             this.ledRunning.TabIndex = 4;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.BackColor = System.Drawing.Color.Transparent;
+            this.label1.Location = new System.Drawing.Point(729, 18);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(104, 13);
+            this.label1.TabIndex = 6;
+            this.label1.Text = "Random Blinky Light";
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
-            this.ClientSize = new System.Drawing.Size(978, 470);
+            this.ClientSize = new System.Drawing.Size(887, 243);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.ledBlinky);
             this.Controls.Add(this.ledRunning);
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.btnLoad);
@@ -103,6 +125,7 @@
             this.Text = "PCAP Util";
             ((System.ComponentModel.ISupportInitialize)(this.dgvCaptures)).EndInit();
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 
@@ -113,6 +136,8 @@
         private System.Windows.Forms.Button btnLoad;
         private System.Windows.Forms.Button btnSave;
         private EARS.LED ledRunning;
+        private EARS.LED ledBlinky;
+        private System.Windows.Forms.Label label1;
     }
 }
 

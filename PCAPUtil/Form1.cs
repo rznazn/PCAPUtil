@@ -20,6 +20,9 @@ namespace PCAPUtil
         private bool running;//bool for handling background threads
         public delegate void CountUpdateDelegate();
         private CountUpdateDelegate updateDelegate;//invokable to update packet counts
+        public delegate void BlinkLedDelegate();
+        private BlinkLedDelegate blinkLedDelegate;//invokable to update packet counts
+        private bool blinkyOn;
         Thread countUpdateThread;//thread for updating packet counts
 
         JavaScriptSerializer mul = new JavaScriptSerializer();//serializer for saving and loading config
@@ -28,6 +31,20 @@ namespace PCAPUtil
             InitializeComponent();
             SetDataGridView();
             updateDelegate = new CountUpdateDelegate(PCAPUtil.Capture.captures.ResetBindings);
+            blinkLedDelegate = new BlinkLedDelegate(BlinkLed);
+        }
+
+        private void BlinkLed()
+        {
+            if (blinkyOn)
+            {
+                ledBlinky.SetLEDGradient(Color.LightGray, Color.DarkBlue);
+            }
+            else
+            {
+                ledBlinky.SetLEDGradient(Color.LightGray, Color.DarkGray);
+            }
+            blinkyOn = !blinkyOn;
         }
 
         /// <summary>
@@ -67,6 +84,7 @@ namespace PCAPUtil
             while (running)
             {
                 this.Invoke(updateDelegate);
+                this.Invoke(blinkLedDelegate);
                 Thread.Sleep(1000);
             }
         }
@@ -107,8 +125,8 @@ namespace PCAPUtil
             sourcePortCol.Width = 50;
             dgvCaptures.Columns.Add(sourcePortCol);
             DataGridViewTextBoxColumn saveFileCol = new DataGridViewTextBoxColumn();
-            saveFileCol.HeaderText = "save file";
-            saveFileCol.DataPropertyName = "filepath";
+            saveFileCol.HeaderText = "folder path";
+            saveFileCol.DataPropertyName = "folderpath";
             saveFileCol.Width = 300;
             dgvCaptures.Columns.Add(saveFileCol);
             DataGridViewTextBoxColumn fileLengthCol = new DataGridViewTextBoxColumn();
@@ -163,6 +181,23 @@ namespace PCAPUtil
                     PCAPUtil.Capture.captures.Add(cap);
                 }
                 PCAPUtil.Capture.captures.ResetBindings();
+            }
+        }
+
+        /// <summary>
+        /// use folder browser to ensure an existing folder is selected
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void dgvCaptures_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.ColumnIndex == 4)
+            {
+                var dialog = new FolderBrowserDialog();
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    dgvCaptures[e.ColumnIndex, e.RowIndex].Value = dialog.SelectedPath;
+                }
             }
         }
     }
