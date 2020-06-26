@@ -33,9 +33,9 @@
             this.btnRun = new System.Windows.Forms.Button();
             this.btnLoad = new System.Windows.Forms.Button();
             this.btnSave = new System.Windows.Forms.Button();
+            this.label1 = new System.Windows.Forms.Label();
             this.ledBlinky = new EARS.LED();
             this.ledRunning = new EARS.LED();
-            this.label1 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.dgvCaptures)).BeginInit();
             this.SuspendLayout();
             // 
@@ -53,7 +53,7 @@
             // 
             // btnRun
             // 
-            this.btnRun.Location = new System.Drawing.Point(205, 13);
+            this.btnRun.Location = new System.Drawing.Point(174, 13);
             this.btnRun.Name = "btnRun";
             this.btnRun.Size = new System.Drawing.Size(75, 23);
             this.btnRun.TabIndex = 1;
@@ -73,7 +73,7 @@
             // 
             // btnSave
             // 
-            this.btnSave.Location = new System.Drawing.Point(109, 12);
+            this.btnSave.Location = new System.Drawing.Point(93, 13);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(75, 23);
             this.btnSave.TabIndex = 3;
@@ -81,10 +81,20 @@
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.BackColor = System.Drawing.Color.Transparent;
+            this.label1.Location = new System.Drawing.Point(689, 17);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(144, 13);
+            this.label1.TabIndex = 6;
+            this.label1.Text = "Semi-superfluous Blinky Light";
+            // 
             // ledBlinky
             // 
             this.ledBlinky.BackColor = System.Drawing.Color.Transparent;
-            this.ledBlinky.Location = new System.Drawing.Point(839, 14);
+            this.ledBlinky.Location = new System.Drawing.Point(839, 13);
             this.ledBlinky.Name = "ledBlinky";
             this.ledBlinky.Size = new System.Drawing.Size(22, 22);
             this.ledBlinky.TabIndex = 5;
@@ -92,20 +102,10 @@
             // ledRunning
             // 
             this.ledRunning.BackColor = System.Drawing.Color.Transparent;
-            this.ledRunning.Location = new System.Drawing.Point(286, 14);
+            this.ledRunning.Location = new System.Drawing.Point(255, 13);
             this.ledRunning.Name = "ledRunning";
             this.ledRunning.Size = new System.Drawing.Size(22, 22);
             this.ledRunning.TabIndex = 4;
-            // 
-            // label1
-            // 
-            this.label1.AutoSize = true;
-            this.label1.BackColor = System.Drawing.Color.Transparent;
-            this.label1.Location = new System.Drawing.Point(729, 18);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(104, 13);
-            this.label1.TabIndex = 6;
-            this.label1.Text = "Random Blinky Light";
             // 
             // Form1
             // 
